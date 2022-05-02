@@ -1,10 +1,8 @@
 use lock_api::GuardSend;
 use std::hint;
-use std::mem;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-const USIZE_BITS: usize = mem::size_of::<usize>() * 8;
-const EXCLUSIVE_BIT: usize = 1 << (USIZE_BITS - 1);
+const EXCLUSIVE_BIT: usize = 1 << (usize::BITS - 1);
 
 pub type RwLock<T> = lock_api::RwLock<RawRwLock, T>;
 pub type RwLockReadGuard<'a, T> = lock_api::RwLockReadGuard<'a, RawRwLock, T>;
@@ -36,7 +34,7 @@ unsafe impl lock_api::RawRwLock for RawRwLock {
 
         let y = x + 1;
         self.data
-            .compare_exchange(x, y, Ordering::Release, Ordering::Relaxed)
+            .compare_exchange(x, y, Ordering::Acquire, Ordering::Relaxed)
             .is_ok()
     }
 
@@ -52,7 +50,7 @@ unsafe impl lock_api::RawRwLock for RawRwLock {
 
     fn try_lock_exclusive(&self) -> bool {
         self.data
-            .compare_exchange(0, EXCLUSIVE_BIT, Ordering::Release, Ordering::Relaxed)
+            .compare_exchange(0, EXCLUSIVE_BIT, Ordering::Acquire, Ordering::Relaxed)
             .is_ok()
     }
 
