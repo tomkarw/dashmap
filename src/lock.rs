@@ -2,6 +2,8 @@ use lock_api::GuardSend;
 use std::hint;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+const UNLOCKED: usize = 0;
+const READER: usize = 1;
 const EXCLUSIVE_BIT: usize = 1 << (usize::BITS - 1);
 
 pub type RwLock<T> = lock_api::RwLock<RawRwLock, T>;
@@ -17,7 +19,7 @@ unsafe impl lock_api::RawRwLock for RawRwLock {
 
     #[allow(clippy::declare_interior_mutable_const)]
     const INIT: Self = RawRwLock {
-        data: AtomicUsize::new(0),
+        data: AtomicUsize::new(UNLOCKED),
     };
 
     fn lock_shared(&self) {
@@ -28,18 +30,18 @@ unsafe impl lock_api::RawRwLock for RawRwLock {
 
     fn try_lock_shared(&self) -> bool {
         let x = self.data.load(Ordering::Acquire);
-        if x & EXCLUSIVE_BIT != 0 {
+        if x & EXCLUSIVE_BIT != UNLOCKED {
             return false;
         }
 
-        let y = x + 1;
+        let y = x + READER;
         self.data
             .compare_exchange(x, y, Ordering::Acquire, Ordering::Relaxed)
             .is_ok()
     }
 
     unsafe fn unlock_shared(&self) {
-        self.data.fetch_sub(1, Ordering::Release);
+        self.data.fetch_sub(READER, Ordering::Release);
     }
 
     fn lock_exclusive(&self) {
@@ -69,6 +71,6 @@ unsafe impl lock_api::RawRwLock for RawRwLock {
 
 unsafe impl lock_api::RawRwLockDowngrade for RawRwLock {
     unsafe fn downgrade(&self) {
-        self.data.store(1, Ordering::SeqCst);
+        self.data.store(READER, Ordering::Release);
     }
 }
